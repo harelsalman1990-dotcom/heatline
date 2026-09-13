@@ -75,7 +75,12 @@ const I = {
   star:'<path d="m12 4 2.3 4.9 5.2.7-3.8 3.7.9 5.3L12 16l-4.6 2.6.9-5.3-3.8-3.7 5.2-.7L12 4Z"/>',
   refresh:'<path d="M20 11a8 8 0 1 0-.7 4.3M20 5v6h-6"/>',
   x:'<path d="M6 6l12 12M18 6L6 18"/>',
-  target:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2"/>'
+  target:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2"/>',
+  home:'<path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/>',
+  search:'<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>',
+  layers:'<path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 14 9 5 9-5"/>',
+  up:'<path d="M12 20V5M6 11l6-6 6 6"/>',
+  play:'<path d="M8 5.5 19 12 8 18.5z"/>'
 };
 const svg = (n,cls="")=>`<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${I[n]}</svg>`;
 const ibtn = (n,act,extra="")=>`<button class="icon-btn ${extra}" data-act="${act}" aria-label="${act}">${svg(n)}</button>`;
@@ -96,7 +101,7 @@ const ART = {
 };
 
 /* ---------- מצב ---------- */
-const S = { route:"home", idx:0, deck:[], reveal:false, sess:null };
+const S = { route:"hub", idx:0, deck:[], reveal:false, sess:null, q:"", smode:"up" };
 
 function applyTheme(){ document.documentElement.setAttribute("data-theme", P.theme||"ink");
   const c = getComputedStyle(document.body).getPropertyValue("--bg").trim();
@@ -109,6 +114,8 @@ function deckAll(){
   return d.length ? d : WORDS;
 }
 const deckDue    = ()=> deckAll().filter(w=>isDue(w.id));
+const deckReview = ()=> deckAll().filter(w=>{ const r=P.words[w.id]; return r && r.seen>0 && r.due<=Date.now(); });
+const deckNew    = ()=> deckAll().filter(w=>!(P.words[w.id]||{}).seen);
 const deckStar   = ()=> WORDS.filter(w=>(P.words[w.id]||{}).star);
 const deckWrong  = ()=> WORDS.filter(w=>{const r=P.words[w.id]; return r && r.bad>0 && r.bad>=r.ok;})
                              .sort((a,b)=>(P.words[b.id].bad-P.words[b.id].ok)-(P.words[a.id].bad-P.words[a.id].ok));
@@ -159,7 +166,7 @@ const app = ()=>$("#app");
 
 function daysToExam(){ return P.exam ? daysBetween(todayKey(), P.exam) : null; }
 
-function screenHome(){
+function screenCards(){
   S.deck = deckAll();
   if(S.idx >= S.deck.length) S.idx = 0;
   const dte = daysToExam();
@@ -169,9 +176,7 @@ function screenHome(){
       ${svg("flame")}<span>${P.streak.cur||0}</span>
       <span style="color:var(--muted);font-weight:500">&nbsp;· ${todayCount()}/${P.goal} היום</span>
     </button>
-    <button class="pill" data-act="exam" style="padding:8px 14px;font-size:13px;color:var(--muted)">
-      ${dte===null ? "קביעת תאריך מבחן" : (dte>0 ? `המבחן בעוד ${dte} ימים` : "יום המבחן!")}
-    </button>
+    <div style="display:flex;gap:8px">${ibtn("search","search","sm")}${ibtn("palette","theme","sm")}</div>
   </div>
   <div class="deckbar">
     <button class="deck-pill" data-act="filter">${svg("filter")}
@@ -183,11 +188,7 @@ function screenHome(){
   <div class="actions">
     ${ibtn("info","info")}${ibtn("share","share")}${ibtn("check","known")}${ibtn("book","star")}
   </div>
-  <div class="bottom">
-    ${ibtn("palette","theme")}
-    <button class="pill primary" data-act="practice">${svg("cap")} תרגול</button>
-    ${ibtn("chart","progress")}
-  </div>`;
+  ${tabbar("cards")}`;
   drawCard();
   bindHome();
 }
@@ -388,6 +389,248 @@ function goalSheet(){
   });
 }
 
+
+/* =======================================================
+   מסך הבית — לוח מחוונים
+   ======================================================= */
+function greet(){
+  const h = new Date().getHours();
+  return h<5 ? "לילה טוב" : h<12 ? "בוקר טוב" : h<17 ? "צהריים טובים" : h<21 ? "ערב טוב" : "לילה טוב";
+}
+function wordOfDay(){
+  const k = todayKey(); let h=0;
+  for(let i=0;i<k.length;i++) h = (h*31 + k.charCodeAt(i)) >>> 0;
+  return WORDS[h % WORDS.length];
+}
+function recommendations(){
+  const rev=deckReview().length, fresh=deckNew().length, wrong=deckWrong().length, done=todayCount();
+  const recs=[];
+  if(rev) recs.push({t:`חזרה יומית · ${rev} מילים`, d:"המילים שהגיע זמנן לפי מרווחי הזמן", art:"due", run:"flash", src:"due"});
+  if(fresh) recs.push({t:`מילים חדשות · ${fresh} ממתינות`, d:"ללמוד מילים שעוד לא ראית", art:"cards", run:"flash", src:"all"});
+  if(wrong>=4) recs.push({t:`תיקון טעויות · ${wrong} מילים`, d:"רק המילים שנפלת בהן", art:"bug", run:"quiz", src:"wrong"});
+  if(done<P.goal) recs.push({t:"להשלים את היעד היומי", d:`נשארו ${P.goal-done} תשובות להיום`, art:"abc", run:"quiz", src:"all"});
+  const byCat = Object.keys(CATS).map(c=>{ const ws=WORDS.filter(w=>w.c===c);
+    return {c, m:ws.reduce((s,w)=>s+mastery(w.id),0)/ws.length}; }).sort((a,b)=>a.m-b.m);
+  recs.push({t:`תרגול ממוקד · ${CATS[byCat[0].c].name}`, d:`הקטגוריה החלשה שלך (${Math.round(byCat[0].m*100)}% שליטה)`,
+             art:"perfect", run:"quiz", src:"all", cat:byCat[0].c});
+  recs.push({t:"תשבץ יומי", d:"שמונה הגדרות מתוך המאגר", art:"grid", run:"xword", src:"all"});
+  return recs.slice(0,3);
+}
+function screenHub(){
+  const dte = daysToExam();
+  const rev = deckReview().length, fresh = deckNew().length;
+  const done = todayCount(), goalPct = Math.min(1, done/P.goal);
+  const wod = wordOfDay();
+  const started = Object.keys(P.words).filter(k=>(P.words[k].seen||0)>0).length;
+  const mastered = Object.keys(P.words).filter(k=>P.words[k].box>=5).length;
+  const recs = recommendations();
+  const C=2*Math.PI*26;
+  app().innerHTML = `
+  <div class="topbar">
+    <div><div class="screen-title">${greet()}</div>
+      <div class="sub">${dte===null ? "אפשר לקבוע תאריך מבחן" :
+        (dte>0?`המבחן בעוד ${dte} ימים`:"יום המבחן — בהצלחה!")}</div></div>
+    <div style="display:flex;gap:8px">${ibtn("palette","theme","sm")}${ibtn("target","exam","sm")}</div>
+  </div>
+  <div class="wrap">
+    <section class="hero">
+      <div class="hero-ring">
+        <svg viewBox="0 0 64 64"><circle class="bgc" cx="32" cy="32" r="26" fill="none" stroke-width="6"/>
+          <circle class="fg" cx="32" cy="32" r="26" fill="none" stroke-width="6"
+            stroke-dasharray="${C}" stroke-dashoffset="${C*(1-goalPct)}"/></svg>
+        <b>${done}<i>/${P.goal}</i></b>
+      </div>
+      <div class="hero-txt">
+        <div class="hero-t">${rev ? `${rev} מילים מחכות לחזרה`
+          : done>=P.goal ? "היעד היומי הושלם — כל הכבוד"
+          : fresh ? `${fresh} מילים חדשות מחכות לך` : "הכול בשליטה כרגע"}</div>
+        <div class="hero-d">${svg("flame")} רצף של ${P.streak.cur||0} ימים · ${started}/${WORDS.length} מילים נלמדו</div>
+        <button class="pill primary" data-run="flash" data-src="${rev?"due":"all"}">
+          ${svg("play")} ${rev ? "להתחיל חזרה" : "להתחיל ללמוד"}</button>
+      </div>
+    </section>
+
+    <button class="searchbar" data-act="search">${svg("search")}
+      <span>חיפוש מילה · או מילה פשוטה לשדרוג</span></button>
+
+    <div class="sec-title">מה כדאי עכשיו</div>
+    ${recs.map(r=>`<button class="row-card" style="margin-bottom:10px" data-run="${r.run}" data-src="${r.src}"
+        ${r.cat?`data-cat-run="${r.cat}"`:""}>
+      <div class="art">${ART[r.art]}</div>
+      <div><div class="nm">${r.t}</div><div class="ds">${r.d}</div></div>
+      <div class="cnt">${svg("fwd")}</div></button>`).join("")}
+
+    <div class="sec-title">מילת היום</div>
+    <section class="wod">
+      <div class="wod-w">${esc(wod.w)}</div>
+      <div class="wod-d">(${esc(wod.p)}) ${esc(wod.d)}</div>
+      <div class="wod-e">״${esc(wod.e)}״</div>
+      <div class="wod-b">
+        <button class="pill" data-wod="say">${svg("sound")} הקראה</button>
+        <button class="pill" data-wod="open">${svg("layers")} לכרטיס</button>
+      </div>
+    </section>
+
+    <div class="sec-title">מבט מהיר</div>
+    <div class="tile3">
+      <div class="stat"><div class="v">${mastered}</div><div class="l">בשליטה מלאה</div></div>
+      <div class="stat"><div class="v">${rev}</div><div class="l">לחזרה היום</div></div>
+      <div class="stat"><div class="v">${P.streak.best||0}</div><div class="l">שיא הרצף</div></div>
+    </div>
+
+    <div class="sec-title">כל האפשרויות</div>
+    <div class="grid2">
+      <button class="mode-card" data-act="cards"><div class="art">${ART.cards}</div>
+        <div class="nm">כרטיסי מילים</div><div class="ds">מעבר מילה־מילה עם הקראה</div></button>
+      <button class="mode-card" data-act="practice"><div class="art">${ART.abc}</div>
+        <div class="nm">תרגולים</div><div class="ds">עשרה מצבי אימון</div></button>
+      <button class="mode-card" data-act="search"><div class="art">${ART.blank}</div>
+        <div class="nm">חיפוש ושדרוג</div><div class="ds">מילה פשוטה ← מילה גבוהה</div></button>
+      <button class="mode-card" data-act="progress"><div class="art">${ART.perfect}</div>
+        <div class="nm">ההתקדמות שלי</div><div class="ds">שליטה, דיוק ורצף</div></button>
+    </div>
+    <div class="sec-title">הלימוד שלי</div>
+    <button class="row-card" data-act="filter">
+      <div class="art">${ART.mark}</div>
+      <div><div class="nm">${deckName()}</div><div class="ds">סינון לפי סוג ורמה — משפיע על כל התרגולים</div></div>
+      <div class="cnt">${deckAll().length}</div></button>
+  </div>
+  ${tabbar("hub")}`;
+
+  const w=$(".wrap");
+  w.addEventListener("click",e=>{
+    const b=e.target.closest("[data-wod]"); if(!b) return;
+    if(b.dataset.wod==="say") say(wod.w); else openWord(wod.id);
+  });
+}
+
+/* =======================================================
+   חיפוש ושדרוג שפה
+   ======================================================= */
+const UPG = (window.UPGRADES||[]).map(u=>({...u, n:norm(u.k)}));
+const WIDX = WORDS.map(w=>({w, nw:norm(w.w), nd:norm(w.d), ne:norm(w.e),
+                            ns:norm([...(w.s||[]),...(w.a||[])].join(" "))}));
+
+function searchBank(q){
+  const out=[];
+  WIDX.forEach(x=>{
+    let sc=0;
+    if(x.nw===q) sc=100;
+    else if(x.nw.startsWith(q)) sc=80;
+    else if(x.nw.includes(q)) sc=60;
+    else if(new RegExp("(^|\\s)"+q).test(x.ns)) sc=45;
+    else if(x.ns.includes(q)) sc=35;
+    else if(x.nd.includes(q)) sc=25;
+    else if(x.ne.includes(q)) sc=12;
+    if(sc) out.push({w:x.w, sc});
+  });
+  return out.sort((a,b)=>b.sc-a.sc).slice(0,40).map(x=>x.w);
+}
+function searchUpgrade(q){
+  const hits=[];
+  UPG.forEach(u=>{
+    const sc = u.n===q ? 100 : u.n.startsWith(q) ? 70 : u.n.includes(q) ? 50 : 0;
+    if(sc) hits.push({k:u.k, sc, items:u.u.map(([w,d])=>({w,d,id:strip(w)}))});
+  });
+  // מהמאגר: מילים שהמילה הפשוטה מופיעה בנרדפות שלהן
+  let fromBank=[];
+  const wordRe = new RegExp("(^|[\\s,־])"+q+"($|[\\s,.־])");
+  WIDX.forEach(x=>{
+    const syn = (x.w.s||[]).map(norm);
+    let sc = 0;
+    if(syn.some(t=>t===q)) sc=3;
+    else if(syn.some(t=>t.split(" ").includes(q))) sc=2;
+    else if(wordRe.test(x.nd)) sc=1;
+    if(sc) fromBank.push({w:x.w.w, d:x.w.d, id:x.w.id, sc});
+  });
+  fromBank.sort((a,b)=>b.sc-a.sc);
+  if(fromBank.length) hits.push({k:q, sc:40, bank:true, items:fromBank.slice(0,8)});
+  return hits.sort((a,b)=>b.sc-a.sc).slice(0,4);
+}
+
+function screenSearch(){
+  app().innerHTML = `
+  <div class="topbar"><div class="screen-title">חיפוש ושדרוג</div></div>
+  <div class="wrap">
+    <div class="seg" id="smode" style="width:100%;justify-content:stretch">
+      <button data-mode="up" class="${S.smode!=="dict"?"on":""}" style="flex:1">שדרוג שפה</button>
+      <button data-mode="dict" class="${S.smode==="dict"?"on":""}" style="flex:1">מילון</button>
+    </div>
+    <div class="searchfield">
+      ${svg("search")}
+      <input id="q" type="text" autocomplete="off" value="${esc(S.q||"")}"
+        placeholder="${S.smode==="dict"?"מילה, פירוש או משפט…":"מילה פשוטה, למשל: חזק"}">
+      <button class="icon-btn sm" data-act="clearq">${svg("close")}</button>
+    </div>
+    <div id="results"></div>
+  </div>
+  ${tabbar("search")}`;
+  const inp=$("#q");
+  inp.addEventListener("input",()=>{ S.q=inp.value; drawResults(); });
+  $("#smode").addEventListener("click",e=>{
+    const b=e.target.closest("[data-mode]"); if(!b)return;
+    S.smode=b.dataset.mode; screenSearch(); $("#q").focus();
+  });
+  drawResults();
+  if(S.q) inp.focus();
+}
+function wordRow(w,extra=""){
+  return `<button class="wrow tap" data-open="${w.id}">
+    <div class="w">${esc(w.w)}</div>
+    <div class="d">${esc(w.d)}</div>${extra}
+    <div class="go">${svg("fwd")}</div></button>`;
+}
+function drawResults(){
+  const box=$("#results"); if(!box) return;
+  const q = norm((S.q||"").trim());
+  if(q.length<2){
+    box.innerHTML = S.smode==="dict"
+      ? `<div class="empty">${svg("search")}<p>חיפוש בכל 300 המילים — לפי מילה, פירוש, מילה נרדפת או משפט לדוגמה.</p></div>`
+      : `<div class="empty">${svg("up")}<p>כותבים מילה יומיומית ומקבלים את החלופות בשפה גבוהה.</p>
+         <div class="sugg">${["חזק","בעיה","להגיד","כעס","חשוב","אבל","טעות","מהר"].map(t=>
+           `<button class="tog" data-sugg="${t}">${t}</button>`).join("")}</div></div>`;
+    return;
+  }
+  if(S.smode==="dict"){
+    const res=searchBank(q);
+    box.innerHTML = res.length
+      ? `<div class="sec-title">${res.length} תוצאות</div><div class="wlist">${res.map(w=>wordRow(w)).join("")}</div>`
+      : `<div class="empty"><p>לא נמצאה מילה. אפשר לנסות חלק מהמילה, או לעבור ללשונית שדרוג שפה.</p></div>`;
+    return;
+  }
+  const hits=searchUpgrade(q);
+  if(!hits.length){
+    const near=searchBank(q).slice(0,6);
+    box.innerHTML = `<div class="empty"><p>אין עדיין שדרוג למילה הזו במילון.</p></div>`+
+      (near.length?`<div class="sec-title">אולי התכוונת</div><div class="wlist">${near.map(w=>wordRow(w)).join("")}</div>`:"");
+    return;
+  }
+  box.innerHTML = hits.map(h=>`
+    <div class="sec-title">${h.bank?`מילים שבמאגר מציעות במקום ״${esc(h.k)}״`:`במקום ״${esc(h.k)}״`}</div>
+    <div class="upg">${h.items.map(it=>{
+      const inBank = WORDS.some(w=>w.id===it.id);
+      return `<div class="up ${inBank?"tap":""}" ${inBank?`data-open="${it.id}"`:""}>
+        <div class="uw">${esc(it.w)}</div><div class="ud">${esc(it.d)}</div>
+        <div class="ua">${inBank?svg("fwd"):""}</div></div>`;
+    }).join("")}</div>`).join("");
+}
+function openWord(id){
+  let d = deckAll(), i = d.findIndex(w=>w.id===id);
+  if(i<0){ P.cats=[]; P.levels=[]; save(); i = deckAll().findIndex(w=>w.id===id); }
+  if(i<0) return toast("המילה לא נמצאה");
+  S.idx=i; S.reveal=true; go("cards");
+}
+
+/* =======================================================
+   ניווט תחתון
+   ======================================================= */
+const TABS = [["hub","home","בית"],["cards","layers","כרטיסים"],["practice","cap","תרגול"],
+              ["search","search","חיפוש"],["progress","chart","מעקב"]];
+function tabbar(active){
+  return `<nav class="tabbar">${TABS.map(([r,ic,nm])=>
+    `<button class="tab ${active===r?"on":""}" data-act="${r}">${svg(ic)}<span>${nm}</span></button>`).join("")}</nav>`;
+}
+
 /* =======================================================
    מרכז התרגול
    ======================================================= */
@@ -403,14 +646,14 @@ const MODES = {
 };
 
 function screenPractice(){
-  const due=deckDue().length, star=deckStar().length, wrong=deckWrong().length;
+  const due=deckReview().length, star=deckStar().length, wrong=deckWrong().length;
   const card = (m,src)=>`<button class="mode-card" data-run="${m}" data-src="${src||"all"}">
       <div class="art">${ART[MODES[m].art]}</div>
       <div class="nm">${MODES[m].t}</div><div class="ds">${MODES[m].d}</div></button>`;
   app().innerHTML = `
   <div class="topbar">
     <div class="screen-title">תרגול</div>
-    ${ibtn("back","home")}
+    <div class="sub">${deckAll().length} מילים · ${deckName()}</div>
   </div>
   <div class="wrap">
     <div class="grid2">${card("flash")}${card("quiz")}${card("cloze")}${card("xword")}</div>
@@ -429,7 +672,8 @@ function screenPractice(){
       <div class="cnt">${star}</div></button>
     <div class="sec-title">אתגרים</div>
     <div class="grid2">${card("sprint")}${card("perfect")}${card("elim")}${card("pairs")}</div>
-  </div>`;
+  </div>
+  ${tabbar("practice")}`;
 }
 
 /* =======================================================
@@ -733,7 +977,7 @@ function finishRun(){
   const msg = pct>=90?"מצוין":pct>=70?"יפה מאוד":pct>=50?"בדרך הנכונה":"ממשיכים לתרגל";
   const misses = [...new Map(s.misses.map(w=>[w.id,w])).values()].slice(0,6);
   S.route="done";
-  app().innerHTML = `<div class="quiz"><div class="topbar"><div></div>${ibtn("close","home","sm")}</div>
+  app().innerHTML = `<div class="quiz"><div class="topbar"><div></div>${ibtn("close","hub","sm")}</div>
     <div class="done">
       <div class="big" style="color:var(--accent)">${pct}%</div>
       <div class="ttl">${msg}</div>
@@ -746,7 +990,7 @@ function finishRun(){
       <div class="btns">
         <button class="pill primary" data-act="again">${svg("refresh")} עוד סבב</button>
         <button class="pill" data-act="practice">תרגולים</button>
-        <button class="pill" data-act="home">כרטיסים</button>
+        <button class="pill" data-act="hub">מסך הבית</button>
       </div>
     </div></div>`;
 }
@@ -999,7 +1243,7 @@ function screenProgress(){
   const overall = WORDS.reduce((s,w)=>s+mastery(w.id),0)/all;
 
   app().innerHTML = `
-  <div class="topbar"><div class="screen-title">ההתקדמות שלי</div>${ibtn("back","home")}</div>
+  <div class="topbar"><div class="screen-title">ההתקדמות שלי</div></div>
   <div class="wrap">
     <div class="rings">
       ${ring(overall,"שליטה כוללת",Math.round(overall*100)+"%")}
@@ -1010,7 +1254,7 @@ function screenProgress(){
       <div class="stat"><div class="v">${started}<span style="font-size:15px;color:var(--muted)">/${all}</span></div><div class="l">מילים שנלמדו</div></div>
       <div class="stat"><div class="v">${mastered}</div><div class="l">מילים בשליטה מלאה</div></div>
       <div class="stat"><div class="v">${P.streak.cur||0}</div><div class="l">רצף ימים (שיא ${P.streak.best||0})</div></div>
-      <div class="stat"><div class="v">${deckDue().length}</div><div class="l">ממתינות לחזרה היום</div></div>
+      <div class="stat"><div class="v">${deckReview().length}</div><div class="l">ממתינות לחזרה היום</div></div>
     </div>
     ${dte!==null?`<div class="stat" style="margin-top:12px"><div class="v">${dte>0?dte:0}</div>
       <div class="l">ימים למבחן · כ־${dte>0?Math.ceil((all-mastered)/Math.max(1,dte)):all-mastered} מילים חדשות ביום כדי לסיים את המאגר</div></div>`:""}
@@ -1030,7 +1274,8 @@ function screenProgress(){
       <div><div class="nm">איפוס ההתקדמות</div><div class="ds">מוחק את כל הנתונים במכשיר הזה</div></div>
       <button class="pill" data-act="reset">איפוס</button>
     </div>
-  </div>`;
+  </div>
+  ${tabbar("progress")}`;
 }
 
 /* =======================================================
@@ -1043,17 +1288,25 @@ function go(route){
   window.scrollTo(0,0);
 }
 function render(){
-  if(S.route==="home")     return screenHome();
+  if(S.route==="hub")      return screenHub();
+  if(S.route==="cards")    return screenCards();
+  if(S.route==="search")   return screenSearch();
   if(S.route==="practice") return screenPractice();
   if(S.route==="progress") return screenProgress();
   if(S.route==="run")      return renderRun();
   if(S.route==="done")     return finishRun();
-  screenHome();
+  screenHub();
 }
 
 document.addEventListener("click", e=>{
+  const op = e.target.closest("[data-open]");
+  if(op){ openWord(op.dataset.open); return; }
+  const sg = e.target.closest("[data-sugg]");
+  if(sg){ S.q=sg.dataset.sugg; const i=$("#q"); if(i) i.value=S.q; drawResults(); return; }
   const run = e.target.closest("[data-run]");
-  if(run){ closeSheet(); startRun(run.dataset.run, run.dataset.src||"all"); return; }
+  if(run){ closeSheet();
+    if(run.dataset.catRun){ P.cats=[run.dataset.catRun]; P.levels=[]; save(); }
+    startRun(run.dataset.run, run.dataset.src||"all"); return; }
   const opt = e.target.closest("[data-opt]");   if(opt){ answer(+opt.dataset.opt); return; }
   const gr  = e.target.closest("[data-grade]"); if(gr){ flashGrade(+gr.dataset.grade); return; }
   const el  = e.target.closest("[data-elim]");  if(el){ elimTap(+el.dataset.elim); return; }
@@ -1066,17 +1319,21 @@ document.addEventListener("click", e=>{
   const a = act.dataset.act;
   if(a==="quit"){ clearInterval(S.timer); S.timer=null; go("practice"); return; }
   if(a==="again"){ startRun(S.sess.mode, S.sess.src||"all"); return; }
-  if(a==="home"){ go("home"); return; }
+  if(a==="hub"){ go("hub"); return; }
+  if(a==="cards"){ go("cards"); return; }
+  if(a==="search"){ S.smode=S.smode||"up"; go("search"); return; }
+  if(a==="clearq"){ S.q=""; const i=$("#q"); if(i){i.value="";i.focus();} drawResults(); return; }
+  if(a==="home"){ go("hub"); return; }
   if(a==="practice"){ go("practice"); return; }
   if(a==="reset"){
     if(confirm("לאפס את כל ההתקדמות? אי אפשר לבטל.")){
-      P = JSON.parse(JSON.stringify(DEFAULTS)); save(); applyTheme(); go("home"); toast("הכול אופס");
+      P = JSON.parse(JSON.stringify(DEFAULTS)); save(); applyTheme(); go("hub"); toast("הכול אופס");
     } return; }
   homeAction(a);
 });
 
 document.addEventListener("keydown", e=>{
-  if(S.route==="home"){
+  if(S.route==="cards"){
     if(e.key==="ArrowLeft")  move(1);
     if(e.key==="ArrowRight") move(-1);
     if(e.key===" "){ e.preventDefault(); S.reveal=!S.reveal; drawCard(); }
@@ -1084,7 +1341,7 @@ document.addEventListener("keydown", e=>{
   if(S.route==="run" && S.sess && S.sess.qs && !S.sess.answered && /^[1-4]$/.test(e.key)){
     const b=$$("#opts .opt")[+e.key-1]; if(b) b.click();
   }
-  if(e.key==="Escape"){ if($("#sheet")) closeSheet(); else if(S.route!=="home") go("home"); }
+  if(e.key==="Escape"){ if($("#sheet")) closeSheet(); else if(S.route!=="hub") go("hub"); }
 });
 
 /* ---------- הפעלה ---------- */
