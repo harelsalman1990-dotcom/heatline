@@ -97,11 +97,13 @@ const ART = {
   perfect:'<svg viewBox="0 0 100 70"><rect class="b" x="18" y="40" width="52" height="10" rx="5"/><rect class="a" x="26" y="26" width="52" height="10" rx="5"/><path class="s" d="M62 30l8 8 16-18" stroke="var(--good)" stroke-width="4"/></svg>',
   elim:'<svg viewBox="0 0 100 70"><rect class="b" x="16" y="12" width="56" height="10" rx="5"/><rect class="a" x="16" y="28" width="56" height="10" rx="5"/><rect class="b" x="16" y="44" width="56" height="10" rx="5"/><path class="s" d="M76 14l10 10M86 14l-10 10" stroke="var(--bad)"/></svg>',
   pairs:'<svg viewBox="0 0 100 70"><rect class="a" x="14" y="14" width="30" height="18" rx="4"/><rect class="b" x="56" y="14" width="30" height="18" rx="4"/><rect class="b" x="14" y="40" width="30" height="18" rx="4"/><rect class="a" x="56" y="40" width="30" height="18" rx="4"/><path class="s" d="M44 23h12M44 49h12"/></svg>',
+  opp:'<svg viewBox="0 0 100 70"><rect class="a" x="14" y="18" width="34" height="10" rx="5"/><rect class="b" x="52" y="42" width="34" height="10" rx="5"/><path class="s" d="M52 23h14M48 47H34"/></svg>',
+  gallows:'<svg viewBox="0 0 100 70"><path class="s" d="M30 60V12h26v10"/><circle class="a" cx="56" cy="30" r="7"/><rect class="b" x="24" y="58" width="52" height="6" rx="3"/></svg>',
   due:'<svg viewBox="0 0 100 70"><circle class="c" cx="50" cy="35" r="23" stroke="var(--line)"/><path class="s" d="M50 20v15l10 5"/><circle class="a" cx="72" cy="16" r="8"/></svg>'
 };
 
 /* ---------- מצב ---------- */
-const S = { route:"hub", idx:0, deck:[], reveal:false, sess:null, q:"", smode:"up" };
+const S = { route:"hub", idx:0, deck:[], reveal:false, sess:null, q:"", smode:"up", sent:"", segs:null };
 
 function applyTheme(){ document.documentElement.setAttribute("data-theme", P.theme||"ink");
   const c = getComputedStyle(document.body).getPropertyValue("--bg").trim();
@@ -451,7 +453,7 @@ function screenHub(){
     </section>
 
     <button class="searchbar" data-act="search">${svg("search")}
-      <span>חיפוש מילה · או מילה פשוטה לשדרוג</span></button>
+      <span>חיפוש מילה · שדרוג · שכתוב משפט</span></button>
 
     <div class="sec-title">מה כדאי עכשיו</div>
     ${recs.map(r=>`<button class="row-card" style="margin-bottom:10px" data-run="${r.run}" data-src="${r.src}"
@@ -484,8 +486,8 @@ function screenHub(){
         <div class="nm">כרטיסי מילים</div><div class="ds">מעבר מילה־מילה עם הקראה</div></button>
       <button class="mode-card" data-act="practice"><div class="art">${ART.abc}</div>
         <div class="nm">תרגולים</div><div class="ds">עשרה מצבי אימון</div></button>
-      <button class="mode-card" data-act="search"><div class="art">${ART.blank}</div>
-        <div class="nm">חיפוש ושדרוג</div><div class="ds">מילה פשוטה ← מילה גבוהה</div></button>
+      <button class="mode-card" data-act="rw"><div class="art">${ART.blank}</div>
+        <div class="nm">שכתוב משפט</div><div class="ds">משפה יומיומית לעברית תקנית</div></button>
       <button class="mode-card" data-act="progress"><div class="art">${ART.perfect}</div>
         <div class="nm">ההתקדמות שלי</div><div class="ds">שליטה, דיוק ורצף</div></button>
     </div>
@@ -548,29 +550,168 @@ function searchUpgrade(q){
   return hits.sort((a,b)=>b.sc-a.sc).slice(0,4);
 }
 
+
+/* =======================================================
+   שכתוב משפט — משפה יומיומית לעברית תקנית
+   ======================================================= */
+const RW = new Map();
+(window.PHRASES||[]).forEach(e=>RW.set(norm(e.k), {...e, ph:true}));
+(window.FORMS||[]).forEach(e=>RW.set(norm(e.k), e));
+(window.UPGRADES||[]).forEach(e=>{ const k=norm(e.k);
+  if(!RW.has(k)) RW.set(k, {k:e.k, to:e.u.map(x=>[x[0],x[1]])}); });
+
+const PUNCT = /^[\s"'׳״(\[]+|[\s"'׳״),.;:!?\]]+$/g;
+function splitPunct(tok){
+  const m = tok.match(/^([("'״׳\[]*)(.*?)([,.;:!?)"'״׳\]]*)$/);
+  return m ? {pre:m[1]||"", core:m[2]||"", post:m[3]||""} : {pre:"",core:tok,post:""};
+}
+const DAGESH = "\u05BC";
+function marksOf(w){ const m=w.match(/^(.)([\u0591-\u05C7]*)/); return m ? (m[2]||"") : ""; }
+function dropDagesh(w){                        // דגש קל נושר אחרי תנועה
+  if(!"בגדכפת".includes(w[0])) return w;
+  const mk = marksOf(w);
+  return mk.includes(DAGESH) ? w[0] + mk.split(DAGESH).join("") + w.slice(1+mk.length) : w;
+}
+function addVav(w){
+  const m = w.match(/^(.)([\u0591-\u05C7]*)/);
+  if(!m) return "וְ"+w;
+  const shuruk = "בומפ".includes(m[1]) || marksOf(w).includes("\u05B0");
+  return shuruk ? "וּ"+dropDagesh(w) : "וְ"+w;
+}
+function addHe(w){                             // ה"א הידיעה
+  const f = w[0];
+  if("אער".includes(f)) return "הָ"+w;
+  if("הח".includes(f))  return "הַ"+w;
+  const mk = marksOf(w);
+  return "הַ" + (mk.includes(DAGESH) ? w : f + DAGESH + w.slice(1));
+}
+function addPrefix(w,pfx){
+  if(pfx==="ו")  return addVav(w);
+  if(pfx==="ה")  return addHe(w);
+  if(pfx==="וה") return addVav(addHe(w));
+  return w;
+}
+function rewriteText(text){
+  const parts = text.split(/(\s+)/);
+  const wi = []; parts.forEach((p,i)=>{ if(p && !/^\s+$/.test(p)) wi.push(i); });
+  const segs = []; const used = new Set();
+  let j = 0;
+  while(j < wi.length){
+    let hit = null;
+    for(let n = Math.min(3, wi.length-j); n >= 1 && !hit; n--){
+      const toks = [];
+      for(let t=0;t<n;t++) toks.push(splitPunct(parts[wi[j+t]]));
+      // סימני פיסוק פנימיים חוסמים צירוף
+      if(n>1 && toks.slice(0,-1).some(t=>t.post)) continue;
+      const core = toks.map(t=>t.core).join(" ");
+      let pfx = "", e = RW.get(norm(core));
+      if(!e) for(const cand of ["וה","ו","ה"]){
+        if(core.startsWith(cand) && norm(core).length > cand.length+2){
+          const x = RW.get(norm(core.slice(cand.length)));
+          if(x){ pfx = cand; e = x; break; }
+        }
+      }
+      if(e) hit = {n, e, pfx, pre:toks[0].pre, post:toks[n-1].post, orig:core};
+    }
+    if(hit){
+      for(let k=0;k<hit.n;k++) used.add(wi[j+k]);
+      for(let x=wi[j]+1; x<wi[j+hit.n-1]; x++) used.add(x);   // הרווחים שבתוך הצירוף
+      segs.push({t:"r", at:wi[j], span:hit.n, orig:hit.orig, pre:hit.pre, post:hit.post,
+                 pfx:hit.pfx, alts:hit.e.to, pick:0, off:false});
+      j += hit.n;
+    } else { segs.push({t:"w", at:wi[j], v:parts[wi[j]]}); j++; }
+  }
+  // הרכבה מחדש לפי סדר המקור, כולל רווחים
+  const out = []; const byAt = new Map(segs.map(x=>[x.at,x]));
+  for(let i=0;i<parts.length;i++){
+    if(byAt.has(i)){ out.push(byAt.get(i)); }
+    else if(!used.has(i) && /^\s+$/.test(parts[i])) out.push({t:"s", v:parts[i]});
+    else if(!used.has(i) && parts[i]) out.push({t:"w", v:parts[i]});
+  }
+  return out;
+}
+function segText(sg){
+  if(sg.t!=="r") return sg.v;
+  if(sg.off) return sg.pre + (sg.pfx||"") + sg.orig + sg.post;
+  return sg.pre + addPrefix(sg.alts[sg.pick][0], sg.pfx) + sg.post;
+}
+const rewriteOut = ()=> (S.segs||[]).map(segText).join("");
+
+function drawRewrite(){
+  const box = $("#rwout"); if(!box) return;
+  if(!S.segs){ box.innerHTML = `<div class="empty">${svg("up")}
+      <p>כותבים משפט בשפה יומיומית ומקבלים אותו בעברית תקנית. אפשר להקיש על כל מילה שהוחלפה ולראות את הפירוש או לבחור חלופה אחרת.</p>
+      <div class="sugg"><button class="tog" data-sentex="1">משפט לדוגמה</button></div></div>`; return; }
+  const n = S.segs.filter(x=>x.t==="r" && !x.off).length;
+  box.innerHTML = `
+    <div class="sec-title">${n ? `${n} החלפות` : "לא נמצאו מילים לשדרוג"}</div>
+    <div class="rwcard">${S.segs.map((sg,i)=> sg.t==="r"
+      ? `<button class="sw ${sg.off?"off":""}" data-seg="${i}">${esc(segText(sg))}</button>`
+      : `<span>${esc(sg.v)}</span>`).join("")}</div>
+    <div class="rwb">
+      <button class="pill" data-act="rwcopy">${svg("share")} העתקה</button>
+      <button class="pill" data-act="rwsrc">${svg("refresh")} המקור</button>
+    </div>
+    ${S.showSrc?`<div class="rwsrc">${S.segs.map(sg=> sg.t==="r"
+        ? `<mark>${esc(sg.pre+(sg.pfx||"")+sg.orig+sg.post)}</mark>` : esc(sg.v)).join("")}</div>`:""}`;
+}
+function segSheet(i){
+  const sg = S.segs[i]; if(!sg) return;
+  const inBank = w => WORDS.find(x=>norm(x.w)===norm(w));
+  sheet(`<h3>במקום ״${esc((sg.pfx||"")+sg.orig)}״</h3>
+    <div class="sub">בוחרים חלופה — או משאירים את המילה המקורית</div>
+    ${sg.alts.map((a,k)=>{ const b=inBank(a[0]);
+      return `<button class="row alt ${!sg.off&&sg.pick===k?"on":""}" data-pick="${k}">
+        <div><div class="lbl" style="font-family:'Frank Ruhl Libre',serif;font-size:19px">${esc(a[0])}</div>
+        <div class="hint">${esc(a[1])}${b?" · יש כרטיס במאגר":""}</div></div>
+        <div>${!sg.off&&sg.pick===k?svg("check"):""}</div></button>`; }).join("")}
+    <button class="row alt ${sg.off?"on":""}" data-pick="-1">
+      <div><div class="lbl">${esc(sg.orig)}</div><div class="hint">להשאיר את המילה המקורית</div></div>
+      <div>${sg.off?svg("check"):""}</div></button>
+  `).addEventListener("click",e=>{
+    const b=e.target.closest("[data-pick]"); if(!b) return;
+    const k=+b.dataset.pick;
+    if(k<0) sg.off=true; else { sg.off=false; sg.pick=k; }
+    closeSheet(); drawRewrite();
+  });
+}
+const SENT_EX = "קמתי בבוקר והלכתי לעבודה, במהלך היום עשיתי הרבה מאוד דברים";
+
 function screenSearch(){
   app().innerHTML = `
   <div class="topbar"><div class="screen-title">חיפוש ושדרוג</div></div>
   <div class="wrap">
     <div class="seg" id="smode" style="width:100%;justify-content:stretch">
-      <button data-mode="up" class="${S.smode!=="dict"?"on":""}" style="flex:1">שדרוג שפה</button>
+      <button data-mode="up" class="${S.smode==="up"?"on":""}" style="flex:1">שדרוג מילה</button>
+      <button data-mode="sent" class="${S.smode==="sent"?"on":""}" style="flex:1">שכתוב משפט</button>
       <button data-mode="dict" class="${S.smode==="dict"?"on":""}" style="flex:1">מילון</button>
     </div>
-    <div class="searchfield">
-      ${svg("search")}
-      <input id="q" type="text" autocomplete="off" value="${esc(S.q||"")}"
-        placeholder="${S.smode==="dict"?"מילה, פירוש או משפט…":"מילה פשוטה, למשל: חזק"}">
-      <button class="icon-btn sm" data-act="clearq">${svg("close")}</button>
-    </div>
-    <div id="results"></div>
+    ${S.smode==="sent" ? `
+      <div class="sentbox">
+        <textarea id="sent" rows="3" placeholder="למשל: קמתי בבוקר והלכתי לעבודה…">${esc(S.sent||"")}</textarea>
+      </div>
+      <div class="rwb" style="margin-top:10px">
+        <button class="pill primary" data-act="dorw">${svg("up")} שכתוב</button>
+        <button class="pill" data-act="sentex">משפט לדוגמה</button>
+      </div>
+      <div id="rwout"></div>`
+    : `
+      <div class="searchfield">
+        ${svg("search")}
+        <input id="q" type="text" autocomplete="off" value="${esc(S.q||"")}"
+          placeholder="${S.smode==="dict"?"מילה, פירוש או משפט…":"מילה פשוטה, למשל: חזק"}">
+        <button class="icon-btn sm" data-act="clearq">${svg("close")}</button>
+      </div>
+      <div id="results"></div>`}
   </div>
   ${tabbar("search")}`;
-  const inp=$("#q");
-  inp.addEventListener("input",()=>{ S.q=inp.value; drawResults(); });
   $("#smode").addEventListener("click",e=>{
     const b=e.target.closest("[data-mode]"); if(!b)return;
-    S.smode=b.dataset.mode; screenSearch(); $("#q").focus();
+    S.smode=b.dataset.mode; screenSearch();
   });
+  if(S.smode==="sent"){ drawRewrite(); return; }
+  const inp=$("#q");
+  inp.addEventListener("input",()=>{ S.q=inp.value; drawResults(); });
   drawResults();
   if(S.q) inp.focus();
 }
@@ -642,7 +783,9 @@ const MODES = {
   sprint: {t:"ספרינט",          d:"60 שניות, כמה שיותר", art:"timer",   time:60, kinds:["w2d","d2w"]},
   perfect:{t:"שלמות",           d:"15 שאלות, בלי טעות",  art:"perfect", n:15, lives:1, kinds:["w2d","d2w","cloze"]},
   elim:   {t:"אלימינציה",       d:"פסילת התשובות השגויות",art:"elim",   n:10},
-  pairs:  {t:"התאמה",           d:"חיבור מילה לפירוש",   art:"pairs",   n:5}
+  pairs:  {t:"התאמה",           d:"חיבור מילה לפירוש",   art:"pairs",   n:5},
+  ant:    {t:"הפכים",            d:"איזו מילה הפוכה?",    art:"opp",     n:12, kinds:["ant"]},
+  gallows:{t:"גרדום",            d:"ניחוש אותיות לפי הגדרה", art:"gallows", n:5}
 };
 
 function screenPractice(){
@@ -672,6 +815,8 @@ function screenPractice(){
       <div class="cnt">${star}</div></button>
     <div class="sec-title">אתגרים</div>
     <div class="grid2">${card("sprint")}${card("perfect")}${card("elim")}${card("pairs")}</div>
+    <div class="sec-title">משחקים</div>
+    <div class="grid2">${card("gallows")}${card("ant")}</div>
   </div>
   ${tabbar("practice")}`;
 }
@@ -717,6 +862,7 @@ function makeQ(w, kinds, pool){
   const opts = shuffle(kinds.filter(k=>{
     if(k==="cloze") return !!clozeOf(w);
     if(k==="syn")   return w.s && w.s.length>0;
+    if(k==="ant")   return w.a && w.a.length>0;
     return true;
   }));
   const kind = opts[0] || "w2d";
@@ -728,6 +874,18 @@ function makeQ(w, kinds, pool){
   if(kind==="cloze"){
     return {kind, w, label:"השלימו את המשפט", body:`<div class="qtext">${clozeOf(w)}</div>`,
             answer:w.w, options:shuffle([w.w, ...distractors(w,"w",pool)]), serif:true};
+  }
+  if(kind==="ant"){
+    const raw = rnd(w.a);
+    const hit = pool.find(x=>norm(x.w)===norm(raw));
+    const answer = hit ? hit.w : raw;
+    const bad = [...new Set(shuffle(pool.filter(x=>x.id!==w.id &&
+                 !w.a.some(t=>norm(t)===norm(x.w)) && !(w.s||[]).some(t=>norm(t)===norm(x.w))))
+                 .slice(0,6).map(x=>x.w))].filter(t=>norm(t)!==norm(answer)).slice(0,3);
+    if(bad.length<3) return {kind:"w2d", w, label:"מה פירוש המילה?", body:`<div class="qword">${esc(w.w)}</div>`,
+            answer:w.d, options:shuffle([w.d, ...distractors(w,"d",pool)])};
+    return {kind, w, label:"איזו מילה הפוכה במשמעות?", body:`<div class="qword">${esc(w.w)}</div>`,
+            answer, options:shuffle([answer, ...bad]), serif:true};
   }
   if(kind==="syn"){
     const answer = rnd(w.s);
@@ -773,7 +931,12 @@ function startRun(mode, src){
   S.sess = {mode, src, pool, words, i:0, right:0, wrong:0, misses:[], lives:M.lives||0,
             total: mode==="sprint" ? 0 : words.length, answered:false, elim:[],
             endAt: M.time ? Date.now()+M.time*1000 : 0, startAt:Date.now()};
-  if(mode!=="flash" && mode!=="elim"){
+  if(mode==="gallows"){
+    const ok = deckAll().filter(x=>{ const p=norm(x.w); return p.length>=3 && p.length<=8 && /^[\u05D0-\u05EA]+$/.test(p); });
+    words.length=0; shuffle(ok).slice(0,5).forEach(x=>words.push(x));
+    if(!words.length){ toast("אין מילים מתאימות למשחק"); return; }
+  }
+  if(mode!=="flash" && mode!=="elim" && mode!=="gallows"){
     S.sess.qs = words.map(w=>makeQ(w, M.kinds, pool));
   }
   S.route="run";
@@ -799,8 +962,9 @@ function runHead(){
 
 function renderRun(){
   const s=S.sess;
-  if(s.mode==="flash") return renderFlash();
-  if(s.mode==="elim")  return renderElim();
+  if(s.mode==="flash")   return renderFlash();
+  if(s.mode==="elim")    return renderElim();
+  if(s.mode==="gallows") return renderGallows();
   if(s.mode==="sprint" && s.i>=s.qs.length){      // מחזור נוסף לספרינט
     s.qs = s.qs.concat(pickWords(s.src,20).map(w=>makeQ(w, MODES.sprint.kinds, s.pool)));
   }
@@ -966,6 +1130,50 @@ function pairTap(i){
   if(w) s.misses.push(w);
   s.sel=null; renderPairs();
   const q=$("#qfoot"); if(q) q.innerHTML='<div class="verdict no">לא מתאים</div>';
+}
+
+/* --- גרדום --- */
+const HEB = "אבגדהוזחטיכלמנסעפצקרשת".split("");
+function renderGallows(){
+  const s=S.sess;
+  if(s.i>=s.words.length) return finishRun();
+  const w=s.words[s.i];
+  if(!s.g || s.gIdx!==s.i){ s.g={word:norm(w.w), disp:strip(w.w), got:new Set(), miss:new Set(), lives:6, over:false}; s.gIdx=s.i; }
+  const g=s.g;
+  const shown = [...g.word].map((c,i)=> (g.got.has(c)||g.over) ? g.disp[i] : "·").join(" ");
+  const solved = [...g.word].every(c=>g.got.has(c));
+  app().innerHTML = `<div class="quiz">
+    ${runHead()}
+    <div class="qbody">
+      <div class="qprompt">
+        <div class="qkind">${w.p} · ${g.word.length} אותיות</div>
+        <div class="qtext" style="margin-bottom:20px">${esc(w.d)}</div>
+        <div class="gword ${g.over?(solved?"ok":"no"):""}">${shown}</div>
+        <div class="lives">${"♥".repeat(g.lives)}<span>${"♡".repeat(6-g.lives)}</span></div>
+      </div>
+      ${g.over ? `<div style="text-align:center">
+          <div class="verdict ${solved?"ok":"no"}">${solved?"כל הכבוד":"המילה הייתה"}</div>
+          <div class="qword" style="font-size:30px;margin-top:6px">${esc(w.w)}</div>
+          <div class="sub" style="margin-top:8px">״${esc(w.e)}״</div>
+          <button class="pill primary" style="margin-top:18px" data-gnext="1">המילה הבאה</button>
+        </div>`
+        : `<div class="keys">${HEB.map(c=>`<button class="key ${g.got.has(c)?"ok":g.miss.has(c)?"no":""}"
+             data-key="${c}" ${g.got.has(c)||g.miss.has(c)?"disabled":""}>${c}</button>`).join("")}</div>`}
+    </div>
+    <div class="qfoot"></div>
+  </div>`;
+}
+function gallowsKey(c){
+  const s=S.sess, g=s.g, w=s.words[s.i];
+  if(g.over || g.got.has(c) || g.miss.has(c)) return;
+  if(g.word.includes(c)){
+    g.got.add(c);
+    if([...g.word].every(x=>g.got.has(x))){ g.over=true; s.right++; grade(w.id,2); logAnswer(true); }
+  } else {
+    g.miss.add(c); g.lives--;
+    if(g.lives<=0){ g.over=true; s.wrong++; grade(w.id,0); logAnswer(false); s.misses.push(w); }
+  }
+  renderGallows();
 }
 
 /* --- סיום --- */
@@ -1301,6 +1509,10 @@ function render(){
 document.addEventListener("click", e=>{
   const op = e.target.closest("[data-open]");
   if(op){ openWord(op.dataset.open); return; }
+  const sq = e.target.closest("[data-seg]");
+  if(sq){ segSheet(+sq.dataset.seg); return; }
+  if(e.target.closest("[data-sentex]")){ S.sent=SENT_EX; S.segs=rewriteText(SENT_EX);
+    const t=$("#sent"); if(t) t.value=SENT_EX; drawRewrite(); return; }
   const sg = e.target.closest("[data-sugg]");
   if(sg){ S.q=sg.dataset.sugg; const i=$("#q"); if(i) i.value=S.q; drawResults(); return; }
   const run = e.target.closest("[data-run]");
@@ -1309,6 +1521,8 @@ document.addEventListener("click", e=>{
     startRun(run.dataset.run, run.dataset.src||"all"); return; }
   const opt = e.target.closest("[data-opt]");   if(opt){ answer(+opt.dataset.opt); return; }
   const gr  = e.target.closest("[data-grade]"); if(gr){ flashGrade(+gr.dataset.grade); return; }
+  const gk  = e.target.closest("[data-key]");   if(gk){ gallowsKey(gk.dataset.key); return; }
+  if(e.target.closest("[data-gnext]")){ S.sess.i++; renderGallows(); return; }
   const el  = e.target.closest("[data-elim]");  if(el){ elimTap(+el.dataset.elim); return; }
   const tl  = e.target.closest("[data-tile]");  if(tl){ pairTap(+tl.dataset.tile); return; }
   if(e.target.closest("[data-flip]")){ S.sess.answered=true; renderFlash(); return; }
@@ -1322,6 +1536,17 @@ document.addEventListener("click", e=>{
   if(a==="hub"){ go("hub"); return; }
   if(a==="cards"){ go("cards"); return; }
   if(a==="search"){ S.smode=S.smode||"up"; go("search"); return; }
+  if(a==="rw"){ S.smode="sent"; go("search"); return; }
+  if(a==="dorw"){ const t=$("#sent"); S.sent=t?t.value:""; S.showSrc=false;
+    S.segs = S.sent.trim() ? rewriteText(S.sent.trim()) : null; drawRewrite();
+    if(S.segs && !S.segs.some(x=>x.t==="r")) toast("לא נמצאו מילים לשדרוג במשפט הזה");
+    return; }
+  if(a==="sentex"){ S.sent=SENT_EX; S.showSrc=false; S.segs=rewriteText(SENT_EX);
+    const t=$("#sent"); if(t) t.value=SENT_EX; drawRewrite(); return; }
+  if(a==="rwsrc"){ S.showSrc=!S.showSrc; drawRewrite(); return; }
+  if(a==="rwcopy"){ const txt=rewriteOut();
+    (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject())
+      .then(()=>toast("הועתק ללוח")).catch(()=>toast("ההעתקה לא נתמכת כאן")); return; }
   if(a==="clearq"){ S.q=""; const i=$("#q"); if(i){i.value="";i.focus();} drawResults(); return; }
   if(a==="home"){ go("hub"); return; }
   if(a==="practice"){ go("practice"); return; }

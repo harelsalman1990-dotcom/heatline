@@ -330,3 +330,37 @@ input[type="date"],input[type="number"]{background:var(--surface2);border:1px so
 .up .ua{margin-inline-start:auto;flex:0 0 auto}
 .up .ua svg{width:15px;height:15px;stroke:var(--dim);fill:none;stroke-width:2}
 .up .ext{font-size:10.5px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:3px 7px;white-space:nowrap}
+
+/* ---------- שכתוב משפט ---------- */
+.sentbox{margin-top:12px}
+.sentbox textarea{width:100%;background:var(--surface);border:1.5px solid var(--line);border-radius:14px;
+  padding:14px;font:inherit;font-size:16px;line-height:1.6;color:var(--ink);resize:vertical;outline:none}
+.sentbox textarea:focus{border-color:var(--accent)}
+.sentbox textarea::placeholder{color:var(--dim)}
+.rwb{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.rwcard{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;
+  font-family:"Frank Ruhl Libre",serif;font-size:20px;line-height:2.1;white-space:pre-wrap}
+.rwcard .sw{font:inherit;color:var(--accent);border-bottom:2px solid color-mix(in srgb,var(--accent) 45%,transparent);
+  padding:0 1px;border-radius:3px}
+.rwcard .sw:active{background:color-mix(in srgb,var(--accent) 18%,transparent)}
+.rwcard .sw.off{color:var(--muted);border-bottom-style:dotted;border-bottom-color:var(--line)}
+.rwsrc{margin-top:12px;background:var(--surface2);border:1px solid var(--line);border-radius:var(--rs);
+  padding:12px 14px;font-size:14.5px;line-height:1.9;color:var(--muted)}
+.rwsrc mark{background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--ink);border-radius:3px;padding:1px 3px}
+.sheet .row.alt{width:100%;text-align:right;gap:10px}
+.sheet .row.alt.on .lbl{color:var(--accent)}
+.sheet .row.alt svg{width:18px;height:18px;stroke:var(--accent);fill:none;stroke-width:2.2}
+
+/* ---------- גרדום ---------- */
+.gword{font-family:"Frank Ruhl Libre",serif;font-size:clamp(26px,8vw,38px);font-weight:700;
+  letter-spacing:.12em;direction:rtl;margin:10px 0 6px}
+.gword.ok{color:var(--good)} .gword.no{color:var(--bad)}
+.lives{font-size:17px;color:var(--bad);letter-spacing:.14em}
+.lives span{color:var(--line)}
+.keys{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-top:8px}
+.key{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:11px 0;
+  font-family:"Frank Ruhl Libre",serif;font-size:19px;font-weight:700;transition:.12s}
+.key:active{transform:scale(.92)}
+.key.ok{background:color-mix(in srgb,var(--good) 22%,transparent);border-color:var(--good)}
+.key.no{opacity:.3}
+.key:disabled{pointer-events:none}

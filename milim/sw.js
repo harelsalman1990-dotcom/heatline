@@ -1,6 +1,6 @@
 // אוצר — Service Worker: מעטפת האפליקציה עובדת גם בלי רשת
 const CACHE = "otzar-v1";
-const SHELL = ["./","./index.html","./styles.css","./app.js","./data.js","./thesaurus.js","./manifest.webmanifest",
+const SHELL = ["./","./index.html","./styles.css","./app.js","./data.js","./thesaurus.js","./rewrite.js","./manifest.webmanifest",
                "./icon-192.png","./icon-512.png","./icon-maskable-512.png","./apple-touch-icon.png"];
 self.addEventListener("install", e=>{
   e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()));
