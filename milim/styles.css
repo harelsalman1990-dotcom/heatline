@@ -364,3 +364,6 @@ input[type="date"],input[type="number"]{background:var(--surface2);border:1px so
 .key.ok{background:color-mix(in srgb,var(--good) 22%,transparent);border-color:var(--good)}
 .key.no{opacity:.3}
 .key:disabled{pointer-events:none}
+
+.mark{text-align:center;margin-top:30px;font-family:"Frank Ruhl Libre",serif;font-size:15px;
+  letter-spacing:.14em;color:var(--dim)}

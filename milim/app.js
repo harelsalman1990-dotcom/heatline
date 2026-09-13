@@ -1,4 +1,4 @@
-/* ===== אוצר — אפליקציית אוצר מילים לפסיכומטרי ===== */
+/* ===== אלף מילים — אוצר מילים, שדרוג שפה ושכתוב ===== */
 (function(){
 "use strict";
 
@@ -314,7 +314,7 @@ function wordSheet(w){
 }
 
 async function shareWord(w){
-  const text = `${w.w} — ${w.d}\n״${w.e}״\n\nנלמד באפליקציית אוצר`;
+  const text = `${w.w} — ${w.d}\n״${w.e}״\n\nנלמד באפליקציית אלף מילים`;
   try{
     if(navigator.share){ await navigator.share({title:strip(w.w), text}); return; }
     await navigator.clipboard.writeText(text); toast("הועתק ללוח");
@@ -496,6 +496,7 @@ function screenHub(){
       <div class="art">${ART.mark}</div>
       <div><div class="nm">${deckName()}</div><div class="ds">סינון לפי סוג ורמה — משפיע על כל התרגולים</div></div>
       <div class="cnt">${deckAll().length}</div></button>
+    <div class="mark">אֶלֶף מִילִים</div>
   </div>
   ${tabbar("hub")}`;
 

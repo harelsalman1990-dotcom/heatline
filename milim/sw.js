@@ -1,5 +1,5 @@
-// אוצר — Service Worker: מעטפת האפליקציה עובדת גם בלי רשת
-const CACHE = "otzar-v1";
+// אלף מילים — Service Worker: מעטפת האפליקציה עובדת גם בלי רשת
+const CACHE = "alef-v1";
 const SHELL = ["./","./index.html","./styles.css","./app.js","./data.js","./thesaurus.js","./rewrite.js","./manifest.webmanifest",
                "./icon-192.png","./icon-512.png","./icon-maskable-512.png","./apple-touch-icon.png"];
 self.addEventListener("install", e=>{
